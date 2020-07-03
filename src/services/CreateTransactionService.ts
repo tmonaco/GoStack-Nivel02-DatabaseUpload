@@ -1,11 +1,9 @@
-import { getCustomRepository, getRepository } from 'typeorm';
-
+import { getCustomRepository } from 'typeorm';
 import AppError from '../errors/AppError';
+import TransactionRepository from '../repositories/TransactionsRepository';
+import SeachOrCreateCategoryService from './SeachOrCreateCategoryService';
 
 import Transaction from '../models/Transaction';
-import Category from '../models/Category';
-
-import TransactionsRepository from '../repositories/TransactionsRepository';
 
 interface Request {
   title: string;
@@ -21,32 +19,24 @@ class CreateTransactionService {
     type,
     category,
   }: Request): Promise<Transaction> {
-    const transactionRepository = getCustomRepository(TransactionsRepository);
-    const categoryRepository = getRepository(Category);
+    const transactionRepository = getCustomRepository(TransactionRepository);
+    const categoryService = new SeachOrCreateCategoryService();
+
+    const categoryDTO = await categoryService.execute({ category });
 
     const { total } = await transactionRepository.getBalance();
 
-    if (type === 'outcome' && total < value) {
-      throw new AppError('Transaction value is greater than the total.');
-    }
-
-    let transactionCategory = await categoryRepository.findOne({
-      where: { title: category },
-    });
-
-    if (!transactionCategory) {
-      transactionCategory = categoryRepository.create({
-        title: category,
-      });
-
-      await categoryRepository.save(transactionCategory);
+    if (type === 'outcome' && value > total) {
+      throw new AppError(
+        'Transação não permitida o valor ultrapassa o saldo em conta',
+      );
     }
 
     const transaction = transactionRepository.create({
       title,
       value,
       type,
-      category: transactionCategory,
+      category_id: categoryDTO.id,
     });
 
     await transactionRepository.save(transaction);
